@@ -1,0 +1,26 @@
+# interfaces.yaml — `port` / `channel` nodes. Memory regions are CANONICAL in
+# state.yaml; ports/channels reference them via `accesses`/`endpoints`.
+nodes:
+- {id: port.issue_handshake, kind: port, status: normative, refs: {of_unit: unit.frontend},
+   attrs: {direction: push, protocol: "claim/peek (model) -> valid/ready (RTL); backpressure; single-issue, program order"}}
+- {id: port.mrf_read, kind: port, status: normative, refs: {accesses: state.mrf},
+   attrs: {direction: read, width_bytes: 32, protocol: "one bank per register"}}
+- {id: port.mrf_write, kind: port, status: normative, refs: {accesses: state.mrf},
+   attrs: {direction: write, width_bytes: 32}}
+- {id: channel.vmem_bus, kind: channel, status: open, refs: {endpoints: [state.vmem]},
+   attrs: {direction: read_write, width_bits: 256, bytes_per_beat: 32, core_cycles_per_beat: 1, banks: 8,
+           notes: "256-bit normative (npu_spec); default.py=512 - claim.vmem.bus_width_bits"}}
+- {id: channel.offchip_link, kind: channel, status: normative, refs: {endpoints: [state.dram]},
+   attrs: {direction: read_write, width_bits: 32, bytes_per_beat: 4, core_cycles_per_beat: 2, command_overhead_words: 2,
+           realized_as: serial_tilelink,
+           notes: "npu_spec/06 §4: off-chip on serial TileLink with PERIPH region; concrete widths/bursts = artifact D"}}
+- {id: channel.dma, kind: channel, status: normative, refs: {endpoints: [state.dram, state.vmem]},
+   attrs: {direction: read_write, count: 8,
+           protocol: "request {dram_addr, vmem_addr, length}; 32B aligned/sized; in-order per-channel completion flag; <=1 outstanding; dma.wait fence; error on issue to busy channel"}}
+- {id: port.weight_slot, kind: port, status: normative, refs: {accesses: state.mxu_weight_slots},
+   attrs: {direction: write, width_bytes: 1024, per_mxu: 2}}
+- {id: port.accum_buffer, kind: port, status: normative, refs: {accesses: state.mxu_accum_buffers},
+   attrs: {direction: read_write, width_bytes: 2048, per_mxu: 2}}
+- {id: channel.host_control, kind: channel, status: open,
+   attrs: {direction: read_write,
+           notes: "host transport / MMIO control block (START/STATUS/ERROR) not architected yet - decision.host_transport; see sw_interface.md"}}

@@ -1,0 +1,26 @@
+# kernels.yaml — `kernel` nodes (npu DIALECT kind). Demonstrates the extension
+# tier: domain-specific nodes that reference core `op`/`state` nodes by id.
+# (Workload detail lives in human/workloads.md.)
+nodes:
+- {id: kernel.gemm, kind: kernel, status: normative,
+   refs: {uses_ops: [op.vmatpush.weight.mxu0, op.vmatmul.mxu0, op.vmatmul.acc.mxu0, op.vmatpop.bf16.acc.mxu0], reads: [state.vmem], writes: [state.vmem]},
+   ext: {npu: {dataflow: weight_stationary}},
+   attrs: {operation: "C = A·B (+bias)", in_dtype: type.fp8_e4m3, out_dtype: type.bf16,
+           shapes: ["32x32x32","32x64x32","64x32x96","64x64x64"], perf_critical: true}}
+- {id: kernel.attention, kind: kernel, status: normative,
+   refs: {uses_ops: [op.vmatmul.mxu0, op.vredmax.row.bf16, op.vredsum.row.bf16, op.vexp.bf16, op.vrecip.bf16]},
+   attrs: {operation: "online/flash softmax attention", out_dtype: type.bf16,
+           shapes: ["q32_k64","q64_k96"], tolerance: {rtol: 0.05, atol: 0.05}, perf_critical: true}}
+- {id: kernel.rms_norm, kind: kernel, status: normative,
+   refs: {uses_ops: [op.vsquare.bf16, op.vredsum.bf16, op.vsqrt.bf16, op.vrecip.bf16, op.vmul.bf16]},
+   attrs: {operation: "x * rsqrt(mean(x^2)+eps)", out_dtype: type.bf16, shapes: ["32x32","64x32","96x32"]}}
+- {id: kernel.softmax, kind: kernel, status: normative,
+   refs: {uses_ops: [op.vredmax.row.bf16, op.vexp.bf16, op.vredsum.row.bf16, op.vrecip.bf16, op.vmul.bf16]},
+   attrs: {operation: "row-stable exp(x-max)/sum", out_dtype: type.bf16, shapes: ["32x32","64x32","96x32"]}}
+- {id: kernel.requant, kind: kernel, status: normative,
+   refs: {uses_ops: [op.vpack.bf16.fp8]},
+   attrs: {operation: "bf16 -> fp8", in_dtype: type.bf16, out_dtype: type.fp8_e4m3}}
+
+# Example of the OTHER dialect kind: a concrete MXU fabric profile.
+- {id: topo.mxu0_systolic, kind: mxu_profile, status: reference, refs: {of_unit: unit.mxu0}, attrs: {fabric: systolic_array}}
+- {id: topo.mxu1_tree, kind: mxu_profile, status: reference, refs: {of_unit: unit.mxu1}, attrs: {fabric: inner_product_tree}}

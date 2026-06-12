@@ -1,0 +1,17 @@
+# npu.yaml (MXU slice copy) — the Atlas NPU dialect: accelerator-specific node KINDS
+# on top of the fixed core (../../../schema/core.py). Identical to the bundle dialect;
+# the slice carries its own copy so it is self-contained and drivable in isolation.
+dialect: npu
+
+kinds:
+  - name: kernel
+    id_prefix: kernel
+    required_attrs: [operation]
+    optional_attrs: [in_dtype, out_dtype, shapes, layout, tolerance, perf_critical, notes]
+    ref_roles: {uses_ops: [op], reads: [state], writes: [state]}
+
+  - name: mxu_profile
+    id_prefix: topo
+    required_attrs: [fabric]
+    optional_attrs: [notes]
+    ref_roles: {of_unit: [unit]}

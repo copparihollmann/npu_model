@@ -1,0 +1,38 @@
+# test_obligations.yaml — `test_intent` + `coverage_goal` nodes (what must be checked).
+nodes:
+- {id: param.tol.default, kind: param, status: normative, attrs: {value: {rtol: 0.01, atol: 0.01}, notes: "default kernel tolerance"}}
+
+# --- directed kernel tests --------------------------------------------------
+- {id: test.gemm_fp8_bf16, kind: test_intent, status: normative, attrs: {test_type: directed, oracle: python_reference, applies_to: [model_sim, rtl_sim], shapes: ["32x32x32","32x64x32","64x32x96","64x64x64"], notes: "bf16 accumulate per K-tile"}}
+- {id: test.batch_matmul, kind: test_intent, status: normative, attrs: {test_type: directed, oracle: python_reference, applies_to: [model_sim, rtl_sim], shapes: ["2x32x32x32","2x64x32x64","4x32x64x32"]}}
+- {id: test.rms_norm, kind: test_intent, status: normative, attrs: {test_type: directed, oracle: python_reference, shapes: ["32x32","64x32","96x32"]}}
+- {id: test.softmax, kind: test_intent, status: normative, attrs: {test_type: directed, oracle: python_reference, shapes: ["32x32","64x32","96x32"], notes: row_stable}}
+- {id: test.silu, kind: test_intent, status: normative, attrs: {test_type: directed, oracle: python_reference, shapes: ["32x32","64x32","64x64"]}}
+- {id: test.gelu_tanh, kind: test_intent, status: normative, attrs: {test_type: directed, oracle: python_reference, shapes: ["32x32","64x32","96x32"]}}
+- {id: test.requant, kind: test_intent, status: normative, refs: {covers: [op.vpack.bf16.fp8]}, attrs: {test_type: directed, oracle: python_reference, notes: "bf16 -> fp8"}}
+- {id: test.elementwise, kind: test_intent, status: normative, refs: {covers: [op.vadd.bf16, op.vsub.bf16, op.vmul.bf16]}, attrs: {test_type: directed, oracle: python_reference, notes: "add/sub/mul/div(=mul recip)"}}
+- {id: test.fused_attention, kind: test_intent, status: normative, attrs: {test_type: directed, oracle: python_reference, shapes: ["q32_k64","q32_k96","q32_k128","q64_k64","q64_k96"], tolerance: {rtol: 0.05, atol: 0.05}, notes: "online/flash softmax"}}
+- {id: test.bias_add_cast, kind: test_intent, status: normative, attrs: {test_type: directed, oracle: python_reference, tolerance: {rtol: 0.1, atol: 0.1}}}
+- {id: test.smolvla_attention, kind: test_intent, status: normative, attrs: {test_type: directed, oracle: cross_check_iree, tolerance: {rtol: 0.2, atol: 0.2}}}
+
+# --- negative tests ---------------------------------------------------------
+- {id: test.neg.mrf_bank_conflict, kind: test_intent, status: normative, refs: {covers: [state.mrf]}, attrs: {test_type: negative, expect: BankConflictError}}
+- {id: test.neg.vmem_bank_conflict, kind: test_intent, status: normative, refs: {covers: [state.vmem]}, attrs: {test_type: negative, expect: BankConflictError}}
+- {id: test.neg.dma_busy_channel, kind: test_intent, status: normative, refs: {covers: [op.dma.load, op.dma.store]}, attrs: {test_type: negative, expect: error}}
+- {id: test.neg.over_issue, kind: test_intent, status: normative, attrs: {test_type: negative, expect: backpressure_error}}
+- {id: test.neg.branch_in_delay_slot, kind: test_intent, status: normative, attrs: {test_type: negative, expect: static_reject}}
+- {id: test.neg.misaligned, kind: test_intent, status: normative, attrs: {test_type: negative, expect: halt_or_error, notes: "not enforced by current model"}}
+
+# --- equivalence + protocol assertions -------------------------------------
+- {id: test.eq.all_kernels, kind: test_intent, status: normative, attrs: {test_type: functional_equivalence, oracle: sim_golden, notes: "RTL matches the executable model within tolerances"}}
+- {id: test.assert.single_issue, kind: test_intent, status: normative, attrs: {test_type: protocol_assertion, notes: "<=1 instruction issues per cycle"}}
+- {id: test.assert.dma_wait_fence, kind: test_intent, status: normative, refs: {covers: [op.dma.wait]}, attrs: {test_type: protocol_assertion, notes: "observes completion before releasing frontend"}}
+- {id: test.assert.delay_slots, kind: test_intent, status: normative, attrs: {test_type: protocol_assertion, notes: "exactly 2 sequential insns after a taken branch"}}
+- {id: test.assert.x0_zero, kind: test_intent, status: normative, refs: {covers: [state.xrf]}, attrs: {test_type: protocol_assertion, notes: "x0 reads 0; writes dropped"}}
+
+# --- coverage goals ---------------------------------------------------------
+- {id: cov.isa_families, kind: coverage_goal, status: normative, attrs: {text: "every instruction family exercised"}}
+- {id: cov.every_mnemonic, kind: coverage_goal, status: normative, attrs: {text: "every op node executed at least once"}}
+- {id: cov.latency_classes, kind: coverage_goal, status: normative, attrs: {text: "each timing class observed in a schedule"}}
+- {id: cov.dma_all_channels, kind: coverage_goal, status: normative, attrs: {text: "all 8 DMA channels load/store/config/wait exercised"}}
+- {id: cov.numeric_edge, kind: coverage_goal, status: normative, attrs: {text: "fp8 saturation, bf16 pack/unpack round-trip, full-tile reductions"}}

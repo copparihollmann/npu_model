@@ -1,0 +1,105 @@
+# spec.yaml — param / timing_class / unit / edge nodes (was the kitchen-sink file).
+# design intent lives in human/00_intent.md; this is the structured core.
+nodes:
+
+# === design parameters (frozen architectural shape) ========================
+- {id: param.insn_width_bits, kind: param, status: normative, attrs: {value: 32, unit: bits}}
+- {id: param.insn_align_bytes, kind: param, status: normative, attrs: {value: 4, unit: bytes}}
+- {id: param.control_flow_delay_slots, kind: param, status: normative, attrs: {value: 2}}
+- {id: param.xrf.count, kind: param, status: normative, attrs: {value: 32}}
+- {id: param.erf.count, kind: param, status: normative, attrs: {value: 32}}
+- {id: param.erf.width_bits, kind: param, status: normative, attrs: {value: 8}}
+- {id: param.mrf.count, kind: param, status: normative, attrs: {value: 64}}
+- {id: param.mrf.bytes, kind: param, status: normative, attrs: {value: 1024, unit: bytes}}
+- {id: param.csrf.count, kind: param, status: reference, attrs: {value: 4096}}
+- {id: param.mxu.count, kind: param, status: normative, attrs: {value: 2}}
+- {id: param.mxu.weight_slots_per_mxu, kind: param, status: normative, attrs: {value: 2}}
+- {id: param.mxu.accum_buffers_per_mxu, kind: param, status: normative, attrs: {value: 2}}
+- {id: param.vpu.lanes_bf16, kind: param, status: normative, attrs: {value: 16}}
+- {id: param.dma.channels, kind: param, status: normative, attrs: {value: 8}}
+- {id: param.dma.align_bytes, kind: param, status: normative, attrs: {value: 32, unit: bytes}}
+- {id: param.tile.rows, kind: param, status: normative, attrs: {value: 32}}
+- {id: param.tile.cols, kind: param, status: normative, attrs: {value: 32}}
+# off-chip / on-chip link parameters (feed the DMA timing formula)
+- {id: param.offchip_link_width_bits, kind: param, status: normative, attrs: {value: 32, unit: bits}}
+- {id: param.offchip_link_core_cycles_per_beat, kind: param, status: normative, attrs: {value: 2}}
+- {id: param.dma_offchip_command_words, kind: param, status: normative, attrs: {value: 2}}
+- {id: param.vmem_bus_width_bits, kind: param, status: open, attrs: {value: 256, unit: bits,
+    notes: "npu_spec=256 (normative); default.py=512 - claim.vmem.bus_width_bits"}}
+- {id: param.vmem_bus_core_cycles_per_beat, kind: param, status: normative, attrs: {value: 1}}
+
+# === execution / scheduling model (as policy params) =======================
+- {id: param.issue_width, kind: param, status: normative, attrs: {value: 1, notes: single_issue_in_order}}
+- {id: param.pipeline_latency, kind: param, status: normative, attrs: {value: 2}}
+- {id: param.scheduling, kind: param, status: normative, attrs: {value: static_latency_annotated}}
+- {id: param.dependency_model, kind: param, status: normative,
+   attrs: {value: no_dynamic_scoreboard,
+           notes: "non-DMA unit occupancy: over-issue to a busy unit is a backpressure ERROR, not a stall; delay + dma.wait are the only blocking primitives; cross-unit deps spaced by delay/dma.wait/independent work"}}
+- {id: param.dma_concurrency, kind: param, status: normative,
+   attrs: {value: 8_queued, notes: "DMA accepts up to 8 queued transfers; <=1 outstanding per channel; issue to a busy channel illegal"}}
+- {id: param.dataflow, kind: param, status: reference, attrs: {value: weight_stationary}}
+- {id: param.concurrency_capacity, kind: param, status: normative,
+   attrs: {value: no_added_stalls_for_legal_schedule,
+           notes: "impl MUST provide enough MRF/VMEM banking+ports that any bank-conflict-free, occupancy-legal schedule runs with no added stalls; port counts/datapath widths/fill-drain are microarch (artifact C)"}}
+
+# === timing classes ========================================================
+- {id: timing.mxu0_matmul, kind: timing_class, status: normative, attrs: {cycles: 96}}
+- {id: timing.mxu1_matmul, kind: timing_class, status: normative, attrs: {cycles: 35}}
+- {id: timing.mxu_push_pop, kind: timing_class, status: normative, attrs: {cycles: 32}}
+- {id: timing.vpu_pipelineable, kind: timing_class, status: normative, attrs: {cycles: 66}}
+- {id: timing.vpu_col_reduction, kind: timing_class, status: normative, attrs: {cycles: 130}}
+- {id: timing.vpu_row_redsum, kind: timing_class, status: normative, attrs: {cycles: 39}}
+- {id: timing.vpu_row_redminmax, kind: timing_class, status: normative, attrs: {cycles: 34}}
+- {id: timing.vpu_vli, kind: timing_class, status: normative, attrs: {cycles: 65}}
+- {id: timing.lsu_vload_vstore, kind: timing_class, status: normative, attrs: {cycles: 34}}
+- {id: timing.lsu_scalar_load, kind: timing_class, status: normative, attrs: {cycles: 2}}
+- {id: timing.lsu_scalar_store, kind: timing_class, status: normative, attrs: {cycles: 1}}
+- {id: timing.scalar_alu, kind: timing_class, status: normative, attrs: {cycles: 1}}
+- {id: timing.dma_config, kind: timing_class, status: normative, attrs: {cycles: 1}}
+- {id: timing.dma_transfer, kind: timing_class, status: normative,
+   attrs: {formula: "max( ceil((bytes + 4*dma_offchip_command_words)/4)*2 , ceil(bytes/(vmem_bus_width_bits/8))*1 )"}}
+- {id: timing.control_zero_or_stall, kind: timing_class, status: normative, attrs: {cycles: 0, notes: "dma.wait: 0 if done else stalls decode"}}
+
+# === components (units) ====================================================
+- {id: unit.frontend, kind: unit, status: normative, refs: {visible_state: [state.pc]},
+   attrs: {role: fetch_decode_issue,
+           responsibility: "single fetch/decode/issue; reserved-zero+pairing rules; 2 delay slots; delay + dma.wait; over-issue to busy non-DMA unit = schedule violation"}}
+- {id: unit.salu, kind: unit, status: normative,
+   refs: {visible_state: [state.xrf, state.csrf, state.erf, state.dma_base, state.halted], latency_class: timing.scalar_alu},
+   attrs: {role: integer_control_and_addressing,
+           responsibility: "integer ALU; branch/jump targets; CSR; seli/seld; dma.base; delay; halt-status"}}
+- {id: unit.mxu0, kind: unit, status: normative,
+   refs: {visible_state: [state.mxu_weight_slots, state.mxu_accum_buffers], latency_class: timing.mxu0_matmul},
+   attrs: {role: systolic_array_mxu, topology: {value: systolic_array, status: reference},
+           responsibility: "FP8xFP8->BF16 matmul; weight residency; accumulator residency; local FP8 quantization (vmatpop.fp8)"}}
+- {id: unit.mxu1, kind: unit, status: normative,
+   refs: {visible_state: [state.mxu_weight_slots, state.mxu_accum_buffers], latency_class: timing.mxu1_matmul},
+   attrs: {role: inner_product_mxu, topology: {value: inner_product_tree, status: reference},
+           responsibility: "FP8xFP8->BF16 matmul; weight/accumulator residency; local FP8 quantization"}}
+- {id: unit.vpu, kind: unit, status: normative,
+   attrs: {role: elementwise_transcendental_reduction, width_lanes_bf16: 16,
+           responsibility: "BF16 elementwise/transcendental; row+col reductions; vli; FP8<->BF16 pack/unpack; operates on MRF"}}
+- {id: unit.xlu, kind: unit, status: normative,
+   attrs: {role: tile_transpose, binding: {value: may_be_vpu_mode_or_distinct_datapath, status: reference}}}
+- {id: unit.lsu, kind: unit, status: normative,
+   attrs: {role: vmem_scalar_and_tensor_io, in_flight: 1,
+           responsibility: "scalar load/store VMEM; vload/vstore; seld"}}
+- {id: unit.dma, kind: unit, status: normative,
+   refs: {visible_state: [state.dma_base, state.sync_flags]},
+   attrs: {role: dram_vmem_movement, channels: 8, responsibility: "hbm<->vmem; per-channel completion; base addressing"}}
+
+# === data-movement graph (edges; see human/SPEC.md §9.2) ===================
+- {id: edge.dram_vmem, kind: edge, status: normative, refs: {src: state.dram, dst: state.vmem},
+   attrs: {via: "dma.load.chN / dma.store.chN", notes: "only DRAM<->VMEM path"}}
+- {id: edge.vmem_mrf, kind: edge, status: normative, refs: {src: state.vmem, dst: state.mrf},
+   attrs: {via: "vload / vstore", latency: 34}}
+- {id: edge.mrf_weightslot, kind: edge, status: normative, refs: {src: state.mrf, dst: state.mxu_weight_slots},
+   attrs: {via: "vmatpush.weight.mxuX", latency: 32}}
+- {id: edge.mrf_acc, kind: edge, status: normative, refs: {src: state.mrf, dst: state.mxu_accum_buffers},
+   attrs: {via: "vmatpush.acc.{fp8,bf16}.mxuX", latency: 32}}
+- {id: edge.acc_mrf, kind: edge, status: normative, refs: {src: state.mxu_accum_buffers, dst: state.mrf},
+   attrs: {via: "vmatpop.{bf16,fp8}.acc.mxuX", latency: 32}}
+- {id: edge.mxu_compute, kind: edge, status: normative, refs: {src: state.mrf, dst: state.mxu_accum_buffers},
+   attrs: {via: "vmatmul[.acc]: act from MRF + weight from slot -> acc (BF16, internal >= fp16)"}}
+- {id: edge.mrf_mrf, kind: edge, status: normative, refs: {src: state.mrf, dst: state.mrf},
+   attrs: {via: "VPU/XLU read+write MRF"}}

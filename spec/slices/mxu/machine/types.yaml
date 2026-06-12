@@ -1,0 +1,30 @@
+# types.yaml (MXU slice) — type nodes in the MXU closure only.
+# Faithful subset of ../../../machine/types.yaml.
+nodes:
+
+# --- scalar data types ------------------------------------------------------
+- {id: type.fp8_e4m3, kind: type, status: normative,
+   attrs: {category: dtype, bits: 8, exp: 4, mantissa: 3, signed: true,
+           notes: "float8_e4m3fn: finite (no inf), max +-448, NaN+subnormals; saturating conversion. MXU operand dtype."}}
+- {id: type.bf16, kind: type, status: normative,
+   attrs: {category: dtype, bits: 16, exp: 8, mantissa: 7, signed: true, notes: "bfloat16; MXU accumulator/output dtype"}}
+- {id: type.fp16, kind: type, status: reference,
+   attrs: {category: dtype, bits: 16, exp: 5, mantissa: 10, signed: true,
+           notes: "internal MXU product/accumulate intermediate only (>= fp16 required); not an architectural operand"}}
+- {id: type.e8m0, kind: type, status: open,
+   attrs: {category: dtype, bits: 8, exp: 8, mantissa: 0,
+           notes: "ERF scale for fp8 pop: npu_spec=E8M0 power-of-2 (2^e); model multiplies by raw uint8 - open discrepancy"}}
+
+# --- tile / register-view types --------------------------------------------
+- {id: type.mrf_tile_fp8, kind: type, status: normative,
+   attrs: {category: tile, layout: "32x32", element: type.fp8_e4m3, of: "1 m register (1024 B)"}}
+- {id: type.mrf_tile_bf16, kind: type, status: normative,
+   attrs: {category: tile, layout: "32x32", element: type.bf16, of: "consecutive m register PAIR (low named) - see oracle pairing rule"}}
+- {id: type.weight_tile_fp8, kind: type, status: normative,
+   attrs: {category: tile, layout: "32x32", element: type.fp8_e4m3, of: "MXU weight slot (1024 B), weight-stationary"}}
+- {id: type.acc_tile_bf16, kind: type, status: normative,
+   attrs: {category: tile, layout: "32x32", element: type.bf16, of: "MXU accumulator (2048 B)"}}
+
+# --- operand class ----------------------------------------------------------
+- {id: type.scale, kind: type, status: normative,
+   attrs: {category: operand_class, element: type.e8m0, notes: "ERF operand; fp8-pop requant scale"}}

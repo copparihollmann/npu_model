@@ -1,0 +1,17 @@
+# C2_collapsed — same MXU capability as the 14-op baseline, but the UNIT (mxu0/mxu1),
+# DTYPE (fp8/bf16), and matmul-vs-accumulate distinctions are factored OUT of the opcode
+# into a modifier immediate (type.mod). Result: 4 opcodes instead of 14.
+# Encodings are variant-allocated (opcode 0b1110111, fresh funct7), not the baseline ISA.
+nodes:
+- {id: op.mxu.push.weight, kind: op, status: reference, attrs: {family: mxu_weight_push, exu: MATRIX, sem: "mxuU.w[wd] = m[vs1]  (U,slot from mod)", encoding: {format: VR, opcode: 0b1110111, funct7: 0b0100000, allocated: ablation_C2}}, refs: {latency_class: timing.mxu_push_pop, unit: unit.mxu0},
+   operands: [{name: wd, type: type.weight_tile_fp8, location: state.mxu_weight_slots, direction: def}, {name: vs1, type: type.mrf_tile_fp8, location: state.mrf, direction: use}, {name: mod, type: type.mod, direction: use}],
+   effect: [{def: wd, expr: {op: push, args: [vs1]}}]}
+- {id: op.mxu.push.acc, kind: op, status: reference, attrs: {family: mxu_acc_push, exu: MATRIX, sem: "mxuU.acc[ad] = (dtype==fp8? dequantize(m[vs1]) : {m[vs1],m[vs1+1]})  (U,dtype from mod)", encoding: {format: VR, opcode: 0b1110111, funct7: 0b0100001, allocated: ablation_C2}}, refs: {latency_class: timing.mxu_push_pop, unit: unit.mxu0},
+   operands: [{name: ad, type: type.acc_tile_bf16, location: state.mxu_accum_buffers, direction: def}, {name: vs1, type: type.mrf_tile_fp8, location: state.mrf, direction: use}, {name: mod, type: type.mod, direction: use}],
+   effect: [{def: ad, expr: {op: acc_push, args: [vs1, mod]}}]}
+- {id: op.mxu.pop, kind: op, status: reference, attrs: {family: mxu_acc_pop, exu: MATRIX, sem: "m[vd] = (dtype==fp8? quantize_fp8(mxuU.acc[vs2], e[es1]) : mxuU.acc[vs2])  (U,dtype from mod)", encoding: {format: VR, opcode: 0b1110111, funct7: 0b0100010, allocated: ablation_C2}}, refs: {latency_class: timing.mxu_push_pop, unit: unit.mxu0},
+   operands: [{name: vd, type: type.mrf_tile_bf16, location: state.mrf, direction: def}, {name: vs2, type: type.acc_tile_bf16, location: state.mxu_accum_buffers, direction: use}, {name: es1, type: type.scale, location: state.erf, direction: use}, {name: mod, type: type.mod, direction: use}],
+   effect: [{def: vd, expr: {op: acc_pop, args: [vs2, es1, mod]}}]}
+- {id: op.mxu.matmul, kind: op, status: reference, attrs: {family: mxu_matmul, exu: MATRIX, sem: "mxuU.acc[vd] = (acc_bit? mxuU.acc[vd] : 0) + m[vs1] @ mxuU.w[vs2]  (U,acc_bit from mod)", encoding: {format: VR, opcode: 0b1110111, funct7: 0b0100011, allocated: ablation_C2}}, refs: {latency_class: timing.mxu0_matmul, unit: unit.mxu0},
+   operands: [{name: vd, type: type.acc_tile_bf16, location: state.mxu_accum_buffers, direction: inout}, {name: vs1, type: type.mrf_tile_fp8, location: state.mrf, direction: use}, {name: vs2, type: type.weight_tile_fp8, location: state.mxu_weight_slots, direction: use}, {name: mod, type: type.mod, direction: use}],
+   effect: [{def: vd, expr: {op: matmul_maybe_acc, args: [vs1, vs2, vd, mod]}}]}

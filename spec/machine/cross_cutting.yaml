@@ -1,0 +1,39 @@
+# cross_cutting.yaml — `axis` nodes: cross-cutting concerns, mostly undefined in v0
+# (recorded explicitly, not as silent holes). See human/SPEC.md §22.
+nodes:
+- {id: axis.interconnect_scaleout, kind: axis, status: open,
+   attrs: {title: "Interconnect / scale-out",
+           what_is_known: ["single instance; on-chip = shared MRF/VMEM/local-buffer hubs, no NoC", "off-chip = serial TileLink + PERIPH (npu_spec/06)"],
+           undefined: [noc_topology, multi_tile_or_die, chiplets, collective_primitives, partitioning],
+           recommended_dir: "v0 single instance; if scaled, add NoC + tiling + collective contract",
+           affects: [microarchitecture, soc_integration]}}
+- {id: axis.ras, kind: axis, status: open,
+   attrs: {title: "Reliability (RAS)",
+           what_is_known: ["none defined; bank/bounds checks are correctness asserts, not RAS"],
+           undefined: [sram_ecc, link_ecc, error_containment, fault_model, logging_recovery, scrubbing],
+           recommended_dir: "decide ECC on VMEM/MRF + off-chip link + error-cause register",
+           affects: [microarchitecture, physical_design, verification]}}
+- {id: axis.security_isolation, kind: axis, status: open,
+   attrs: {title: "Security / isolation",
+           what_is_known: ["single-tenant; only DRAM/VMEM bounds checks"],
+           undefined: [memory_protection_iommu, multi_tenant_isolation, privilege_modes, secure_boot, attestation],
+           recommended_dir: "out of scope while single-tenant; mandatory once shared",
+           affects: [architecture, soc_integration, software]}}
+- {id: axis.power_clock_thermal, kind: axis, status: open,
+   attrs: {title: "Power / clock / thermal",
+           what_is_known: ["single clock domain; DMA is the only async seam; power is a target only"],
+           undefined: [power_domains, clock_gating, dvfs, idle_sleep, retention, thermal_throttling],
+           recommended_dir: "define idle/active + clock-gating intent; DVFS/domains = artifact F",
+           affects: [physical_design, soc_integration]}}
+- {id: axis.qos_preemption_virtualization, kind: axis, status: open,
+   attrs: {title: "QoS / preemption / virtualization",
+           what_is_known: ["run-to-halt single context; 8 DMA channels (no priorities)"],
+           undefined: [preemption_context_switch, time_slicing, priority_qos, sr_iov, state_save_restore],
+           recommended_dir: "v0 non-preemptive; preemption needs defined save/restore of MRF/ERF/acc/weight/flags",
+           affects: [architecture, software, soc_integration]}}
+- {id: axis.capability_versioning, kind: axis, status: open,
+   attrs: {title: "Capability / feature negotiation & versioning",
+           what_is_known: ["spec versioned (0.1.0); no architected ID/feature register (CSRs scratch)"],
+           undefined: [id_register, version_register, feature_bits, dse_config_discovery],
+           recommended_dir: "add ID + VERSION + capability register (ties to decision.host_transport)",
+           affects: [software, soc_integration]}}

@@ -1,0 +1,9 @@
+# shared/state.yaml — extra state node(s) the RISC/CISC variants reference.
+# The HARDWARE is unchanged (same weight slots + accumulators as the baseline);
+# this node is a reference VIEW that the C1/C4 variants abstract over.
+nodes:
+- {id: state.mxu_tile_regs, kind: state, status: reference,
+   refs: {per_unit: [unit.mxu0, unit.mxu1]},
+   attrs: {category: register_file, visibility: accelerator_internal,
+           role: "unified VIEW of {weight slots + accumulators} as one MXU-local tile register file",
+           notes: "the RISC (C1) and CISC (C4) variants treat MXU-local storage as one addressable tile RF; baseline (C3) keeps them as distinct named buffers (state.mxu_weight_slots / state.mxu_accum_buffers). Same physical storage."}}

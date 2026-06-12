@@ -1,0 +1,44 @@
+# spec.yaml (MXU slice) — params, timing classes, units, and the MXU dataflow edges.
+# Faithful subset of ../../../machine/spec.yaml restricted to the MXU.
+nodes:
+
+# === MXU shape parameters ==================================================
+- {id: param.tile.rows, kind: param, status: normative, attrs: {value: 32}}
+- {id: param.tile.cols, kind: param, status: normative, attrs: {value: 32}}
+- {id: param.mrf.count, kind: param, status: normative, attrs: {value: 64}}
+- {id: param.mrf.bytes, kind: param, status: normative, attrs: {value: 1024, unit: bytes}}
+- {id: param.mxu.count, kind: param, status: normative, attrs: {value: 2}}
+- {id: param.mxu.weight_slots_per_mxu, kind: param, status: normative, attrs: {value: 2}}
+- {id: param.mxu.accum_buffers_per_mxu, kind: param, status: normative, attrs: {value: 2}}
+
+# === execution model (the part the MXU contract depends on) =================
+- {id: param.issue_width, kind: param, status: normative, attrs: {value: 1, notes: single_issue_in_order}}
+- {id: param.dataflow, kind: param, status: normative, attrs: {value: weight_stationary}}
+- {id: param.dependency_model, kind: param, status: normative,
+   attrs: {value: no_dynamic_scoreboard,
+           notes: "MXU ops are blocking: the unit holds its issue port for the full latency class; over-issue to a busy MXU is a backpressure ERROR, not a stall"}}
+
+# === timing classes (cycles; authoritative = npu_model MXU_OP_LATENCIES) ====
+- {id: timing.mxu0_matmul, kind: timing_class, status: normative, attrs: {cycles: 96, notes: "systolic array"}}
+- {id: timing.mxu1_matmul, kind: timing_class, status: normative, attrs: {cycles: 35, notes: "inner-product tree"}}
+- {id: timing.mxu_push_pop, kind: timing_class, status: normative, attrs: {cycles: 32, notes: "vmatpush.* / vmatpop.* on both MXUs"}}
+
+# === units =================================================================
+- {id: unit.mxu0, kind: unit, status: normative,
+   refs: {visible_state: [state.mxu_weight_slots, state.mxu_accum_buffers], latency_class: timing.mxu0_matmul},
+   attrs: {role: systolic_array_mxu, topology: {value: systolic_array, status: reference},
+           responsibility: "FP8xFP8->BF16 matmul; weight residency; accumulator residency; local FP8 quantization (vmatpop.fp8)"}}
+- {id: unit.mxu1, kind: unit, status: normative,
+   refs: {visible_state: [state.mxu_weight_slots, state.mxu_accum_buffers], latency_class: timing.mxu1_matmul},
+   attrs: {role: inner_product_mxu, topology: {value: inner_product_tree, status: reference},
+           responsibility: "FP8xFP8->BF16 matmul; weight/accumulator residency; local FP8 quantization"}}
+
+# === MXU dataflow graph (edges) ============================================
+- {id: edge.mrf_weightslot, kind: edge, status: normative, refs: {src: state.mrf, dst: state.mxu_weight_slots},
+   attrs: {via: "vmatpush.weight.mxuX", latency: 32}}
+- {id: edge.mrf_acc, kind: edge, status: normative, refs: {src: state.mrf, dst: state.mxu_accum_buffers},
+   attrs: {via: "vmatpush.acc.{fp8,bf16}.mxuX", latency: 32}}
+- {id: edge.mxu_compute, kind: edge, status: normative, refs: {src: state.mrf, dst: state.mxu_accum_buffers},
+   attrs: {via: "vmatmul[.acc]: activation from MRF x weight from slot -> accumulator (BF16, internal >= fp16)"}}
+- {id: edge.acc_mrf, kind: edge, status: normative, refs: {src: state.mxu_accum_buffers, dst: state.mrf},
+   attrs: {via: "vmatpop.{bf16,fp8}.acc.mxuX", latency: 32}}

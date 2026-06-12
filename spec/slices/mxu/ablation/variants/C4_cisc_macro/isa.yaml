@@ -1,0 +1,12 @@
+# C4_cisc_macro — one CISC opcode. `tilegemm` is a microcoded macro that fuses the whole
+# weight-stationary K-tiled GEMM tile: push weight tiles, matmul-accumulate over K, pop
+# result to MRF. Minimal opcode surface, MAXIMUM per-op semantic complexity.
+# Variant-allocated encoding (opcode 0b1110111, fresh funct7).
+nodes:
+- {id: op.tilegemm, kind: op, status: reference, attrs: {family: cisc_gemm, exu: MATRIX,
+     sem: "macro(unit U, K): for k in 0..K-1 { U.w = m[wt + k]; U.acc = (k==0?0:U.acc) + m[act + k] @ U.w }; m[vd] = U.acc",
+     encoding: {format: VR, opcode: 0b1110111, funct7: 0b1000000, allocated: ablation_C4},
+     latency_note: "microcoded: ~K*(push+matmul) + pop; not a single fixed latency class"},
+   refs: {latency_class: timing.mxu0_matmul, unit: unit.mxu0},
+   operands: [{name: vd, type: type.mrf_tile_bf16, location: state.mrf, direction: def}, {name: act, type: type.mrf_tile_fp8, location: state.mrf, direction: use}, {name: wt, type: type.mrf_tile_fp8, location: state.mrf, direction: use}, {name: k, type: type.mod, direction: use}, {name: mode, type: type.mod, direction: use}],
+   effect: [{def: vd, expr: {op: gemm_macro, args: [act, wt, k, mode]}}]}

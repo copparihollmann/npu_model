@@ -1,0 +1,9 @@
+# shared/types.yaml — extra type nodes the ISA VARIANTS need beyond the baseline
+# slice (../../machine/types.yaml). Loaded for every variant so refs resolve.
+nodes:
+- {id: type.mod, kind: type, status: reference,
+   attrs: {category: operand_class, bits: 8,
+           notes: "variant modifier immediate: encodes folded fields (unit mxu0/mxu1, dtype fp8/bf16, acc/clear bit, target weight|acc, K count). The thing complex variants move OUT of the opcode."}}
+- {id: type.tile_any, kind: type, status: reference,
+   attrs: {category: operand_class, layout: "32x32",
+           notes: "generic 32x32 tile (fp8 or bf16) — the RISC variant's uniform tile-register operand; concrete dtype resolved by a type.mod field"}}

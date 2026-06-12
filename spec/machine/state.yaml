@@ -1,0 +1,70 @@
+# state.yaml — `state` nodes (architectural state). The SSA "locations" ops read/write.
+# read_by/written_by are NOT stored here: they are DERIVED from op operands (single
+# source of truth). imem/vmem/dram are CANONICAL here (was multiply-defined before).
+nodes:
+
+- {id: state.xrf, kind: state, status: normative,
+   refs: {element_type: type.int32},
+   attrs: {category: register_file, visibility: software_visible, count: 32, width_bits: 32,
+           names: "x0..x31", special: "x0 hardwired 0, writes ignored", reset_value: unspecified,
+           notes: "width 32 intended; model mixes RV64 behaviors - see claim.scalar.register_width (open)"}}
+
+- {id: state.erf, kind: state, status: normative,
+   refs: {element_type: type.e8m0},
+   attrs: {category: register_file, visibility: software_visible, count: 32, width_bits: 8,
+           names: "e0..e31", role: fp8_quantization_scale, reset_value: unspecified,
+           notes: "scale semantics open: E8M0 power-of-2 (npu_spec) vs raw-int multiply (model) - claim.erf.scale_type"}}
+
+- {id: state.mrf, kind: state, status: normative,
+   attrs: {category: register_file, visibility: software_visible, count: 64,
+           geometry: "32 rows x 32 bytes = 1024 B", bank_model: one_bank_per_register,
+           views: "32x32 FP8 (type.mrf_tile_fp8) | 32x16 BF16 (type.mrf_halftile_bf16) | 32x32 BF16 pair (type.mrf_tile_bf16)",
+           reset_value: unspecified}}
+
+- {id: state.csrf, kind: state, status: reference,
+   attrs: {category: register_file, visibility: software_visible, count: 4096, width_bits: 32,
+           notes: "general scratch; no architected control CSRs defined yet"}}
+
+- {id: state.imem, kind: state, status: normative,
+   attrs: {category: memory, visibility: software_visible, capacity: "128 KiB",
+           addressing: "instructions[pc/4]; pc is a byte address (+4)", system_map_base: 0x00020000,
+           system_map_base_status: reference, load_method: software_write_before_run, reset_value: unspecified}}
+
+- {id: state.vmem, kind: state, status: normative,
+   attrs: {category: memory, visibility: software_visible, capacity: "1 MiB", banks: 8,
+           conflict_granularity_bytes: 32, addressing: "0-based byte offset",
+           conflict_policy: software_managed_static_runtime_detected_error,
+           system_map_base: 0x20000000, system_map_base_status: reference, reset_value: unspecified,
+           notes: "banks=8 is physical; the architectural conflict unit is the 32-byte line"}}
+
+- {id: state.dram, kind: state, status: assumption,
+   attrs: {category: memory, visibility: software_visible, capacity: "16 GiB",
+           addressing: "(dma_base<<32)|offset", system_map_base: 0x80000000, system_map_base_status: reference,
+           access: asynchronous_via_dma_only, reset_value: unspecified,
+           notes: "16 GiB architectural aperture; sim default 1 GiB - claim.dram.capacity"}}
+
+- {id: state.mxu_weight_slots, kind: state, status: normative,
+   refs: {element_type: type.weight_tile_fp8, per_unit: [unit.mxu0, unit.mxu1]},
+   attrs: {category: buffer, visibility: accelerator_internal, per_mxu: 2, slot_bytes: 1024,
+           bank_model: one_bank_per_mxu, names: "w0,w1", reset_value: unspecified}}
+
+- {id: state.mxu_accum_buffers, kind: state, status: normative,
+   refs: {element_type: type.acc_tile_bf16, per_unit: [unit.mxu0, unit.mxu1]},
+   attrs: {category: buffer, visibility: accelerator_internal, per_mxu: 2, buffer_bytes: 2048,
+           bank_model: one_bank_per_mxu, names: "acc0,acc1", reset_value: unspecified}}
+
+- {id: state.dma_base, kind: state, status: normative,
+   attrs: {category: register, visibility: software_visible, width_bits: 32,
+           role: "upper 32 bits of DRAM address (single, shared)", reset_value: 0}}
+
+- {id: state.sync_flags, kind: state, status: normative,
+   attrs: {category: flag, visibility: software_visible, count: 8,
+           semantics: "per DMA channel; busy from issue to completion", reset_value: idle}}
+
+- {id: state.pc, kind: state, status: normative,
+   attrs: {category: register, visibility: implicit, units: instruction_word_index,
+           notes: "npu_spec: word index (+1). Model: byte addr (+4). claim.pc.units (open)", reset_value: 0}}
+
+- {id: state.halted, kind: state, status: normative,
+   attrs: {category: flag, visibility: software_visible, reset_value: false,
+           set_by: "ecall/ebreak (fatal classes abort in model)"}}

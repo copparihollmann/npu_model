@@ -1,0 +1,30 @@
+# design_space.yaml — `knob` nodes (legal DSE variation). `varies` refs name the
+# nodes a knob changes (impact analysis); `regenerate` lists what to rebuild.
+nodes:
+- {id: knob.mxu.topology, kind: knob, status: normative, refs: {varies: [unit.mxu0, unit.mxu1]},
+   attrs: {choices: [systolic_array, inner_product_tree], default: {mxu0: systolic_array, mxu1: inner_product_tree},
+           affects: [microarchitecture, performance], sw_compatible: true, regenerate: [resource_model, perf_model]}}
+- {id: knob.mxu.count, kind: knob, status: normative, refs: {varies: [param.mxu.count, unit.mxu0, unit.mxu1]},
+   attrs: {choices: [1, 2, 4], default: 2, affects: [architecture, microarchitecture], sw_compatible: false, regenerate: [isa, perf_model, tests]}}
+- {id: knob.mxu.latency_class, kind: knob, status: normative, refs: {varies: [timing.mxu0_matmul, timing.mxu1_matmul]},
+   attrs: {range: [20, 200], unit: cycles, default: {mxu0: 96, mxu1: 35}, affects: [microarchitecture, performance], sw_compatible: true, regenerate: [perf_model, schedules, tests]}}
+- {id: knob.vmem.bank_count, kind: knob, status: normative, refs: {varies: [state.vmem]},
+   attrs: {choices: [4, 8, 16], default: 8, affects: [microarchitecture], sw_compatible: false, regenerate: [bank_conflict_model, schedules, tests]}}
+- {id: knob.vmem.capacity, kind: knob, status: normative, refs: {varies: [state.vmem]},
+   attrs: {choices: ["512 KiB", "1 MiB", "2 MiB"], default: "1 MiB", affects: [architecture], sw_compatible: false, regenerate: [tiling, tests]}}
+- {id: knob.vmem.bus_width_bits, kind: knob, status: open, refs: {varies: [param.vmem_bus_width_bits, channel.vmem_bus]},
+   attrs: {choices: [256, 512], default: 256, affects: [microarchitecture, performance], sw_compatible: true, regenerate: [perf_model]}}
+- {id: knob.dataflow, kind: knob, status: normative, refs: {varies: [param.dataflow]},
+   attrs: {choices: [weight_stationary, output_stationary, row_stationary], default: weight_stationary, affects: [microarchitecture, software], sw_compatible: partial, regenerate: [schedules, perf_model]}}
+- {id: knob.buffer.weight_slots_per_mxu, kind: knob, status: normative, refs: {varies: [param.mxu.weight_slots_per_mxu, state.mxu_weight_slots]},
+   attrs: {range: [1, 4], default: 2, affects: [microarchitecture], sw_compatible: false, regenerate: [schedules, tests]}}
+- {id: knob.buffer.accum_buffers_per_mxu, kind: knob, status: normative, refs: {varies: [param.mxu.accum_buffers_per_mxu, state.mxu_accum_buffers]},
+   attrs: {range: [1, 4], default: 2, affects: [microarchitecture], sw_compatible: false, regenerate: [schedules, tests]}}
+- {id: knob.vpu.lanes_bf16, kind: knob, status: normative, refs: {varies: [param.vpu.lanes_bf16, unit.vpu]},
+   attrs: {choices: [8, 16, 32], default: 16, affects: [microarchitecture, performance], sw_compatible: true, regenerate: [perf_model]}}
+- {id: knob.dma.channels, kind: knob, status: normative, refs: {varies: [param.dma.channels, state.sync_flags]},
+   attrs: {choices: [4, 8, 16], default: 8, affects: [architecture], sw_compatible: false, regenerate: [isa, tests]}}
+- {id: knob.pipeline.depth, kind: knob, status: normative, refs: {varies: [param.pipeline_latency, param.control_flow_delay_slots]},
+   attrs: {range: [1, 8], default: 2, affects: [architecture, microarchitecture], sw_compatible: false, regenerate: [isa, schedules, tests]}}
+- {id: knob.tile.shape, kind: knob, status: normative, refs: {varies: [param.tile.rows, param.tile.cols, state.mrf]},
+   attrs: {choices: ["16x16", "32x32", "64x64"], default: "32x32", affects: [architecture, software], sw_compatible: false, regenerate: [isa, state, tiling, tests]}}

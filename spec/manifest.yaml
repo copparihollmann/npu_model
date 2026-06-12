@@ -1,0 +1,118 @@
+# =============================================================================
+# manifest.yaml — Spec bundle index: layout, lineage, roles, source-of-truth,
+#                 reading bundles, and cross-references. Consumed by lint.py.
+# =============================================================================
+
+# Dialects loaded on top of the fixed core meta-model (spec/schema/core.py).
+# Designers add accelerator-specific kinds here, never to core. See spec/dialects/.
+dialects: [npu]
+
+# Core node-kind vocabulary (fixed, versioned; the IR depends on this set):
+core_kinds: [type, param, unit, state, port, channel, op, timing_class, edge,
+             constraint, knob, test_intent, coverage_goal, claim, source, decision, axis, artifact]
+
+layout:
+  "spec/schema/":      "typed core meta-model (core.py) + loader/validator (load.py)"
+  "spec/dialects/":    "registered dialects that extend the core (npu.yaml)"
+  "spec/README.md":    "front door (start here)"
+  "spec/manifest.yaml": "this index"
+  "spec/lint.py":      "validator (python spec/lint.py)"
+  "spec/human/":       "S0/S1 human-readable narrative (.md) — authored"
+  "spec/machine/":     "S2 typed source of truth (.yaml) — authored, canonical for values/claims"
+  "spec/assets/":      "diagrams referenced by the narrative"
+
+# -----------------------------------------------------------------------------
+# Lineage: what is GIVEN (external sources) vs AUTHORED (this bundle, hand-written)
+# vs OUTPUT (future, generated FROM this bundle — does not exist yet). Nothing in
+# this bundle is auto-generated today: human/ and machine/ are BOTH hand-authored
+# and kept consistent by lint.py; machine/ wins on any value disagreement.
+# -----------------------------------------------------------------------------
+lineage:
+  given_external_sources:        # live OUTSIDE spec/; this bundle is distilled FROM them
+    - {ref: npu_model,            role: "executable model — authoritative semantics/latencies; also the evaluation ORACLE", path: "../ (repo root)"}
+    - {ref: npu_spec/,            role: "prior human spec — SUPERSEDED by this bundle (kept for traceability)", path: "../npu_spec/"}
+    - {ref: tests/,               role: "verification source", path: "../tests/"}
+    - {ref: npu_speed_of_light/,  role: "roofline / workload case studies", path: "../npu_speed_of_light/"}
+  authored_here:
+    human:   "spec/human/*.md   — S0/S1 narrative (canonical for prose/rationale)"
+    machine: "spec/machine/*.yaml — S2 typed (canonical for every value and claim)"
+    consistency: "lint.py enforces human<->machine agreement; machine wins disagreements"
+  output_future_not_here:        # generated FROM machine/ via the IR; tracked in machine/downstream.yaml
+    - IR
+    - functional_models
+    - cost_models
+    - tests / scoreboards / assertions
+    - RTL-generation tasks
+  supersession:
+    - "spec/ (this bundle) SUPERSEDES npu_spec/ as the contract"
+    - "within spec/: machine/*.yaml SUPERSEDES human/*.md for any value/claim"
+
+source_of_truth_policy:
+  values_and_claims: spec/machine/*.yaml
+  human_narrative: spec/human/SPEC.md
+  rule: "No value/claim may differ between human/ and machine/. If they do, machine/ wins; lint.py enforces critical-constant agreement and file-set completeness."
+
+# -----------------------------------------------------------------------------
+# Artifacts. role: index|tool|authored_human|authored_machine.
+# format: md|yaml|py. maturity: S0..S2. (derived_from omitted = hand-authored from
+# the given sources; nothing here is auto-generated.)
+# -----------------------------------------------------------------------------
+artifacts:
+  - {file: README.md,                     role: index,            format: md,   maturity: S1, owner: architecture, covers: "front door: layout, lineage, how to read/validate/export"}
+  - {file: manifest.yaml,                 role: index,            format: yaml, maturity: S2, owner: architecture, covers: "this index"}
+  - {file: lint.py,                       role: tool,             format: py,   maturity: na, owner: architecture, covers: "export gate: graph + critical-constant + file-set"}
+  - {file: META.md,                       role: index,            format: md,   maturity: S2, owner: architecture, covers: "meta-model authoring conventions (envelope, kinds, refs, dialects, effect grammar)"}
+  - {file: schema/core.py,                role: tool,             format: py,   maturity: na, owner: architecture, covers: "typed core meta-model (envelope, ~18 core kinds, validation)"}
+  - {file: schema/load.py,                role: tool,             format: py,   maturity: na, owner: architecture, covers: "loader: YAML -> typed node graph -> validate; --ssa smoke test"}
+  - {file: dialects/npu.yaml,             role: authored_machine, format: yaml, maturity: S2, owner: architecture, covers: "npu dialect: kernel + mxu_profile kinds"}
+  - {file: human/ir_mapping.md,           role: authored_human,   format: md,   maturity: S1, owner: architecture, covers: "node -> SSA-IR lowering contract"}
+
+  - {file: human/00_intent.md,            role: authored_human,   format: md,   maturity: S0, owner: architecture, covers: "design intent, canonical pipeline"}
+  - {file: human/workloads.md,            role: authored_human,   format: md,   maturity: S0_S1, owner: architecture, covers: "§3 workload characterization"}
+  - {file: human/SPEC.md,                 role: authored_human,   format: md,   maturity: S1, owner: architecture, covers: "§0-§22 canonical narrative + checklist"}
+  - {file: human/numerics.md,             role: authored_human,   format: md,   maturity: S1, owner: architecture, covers: "§7 bit-exact numeric contract"}
+  - {file: human/sw_interface.md,         role: authored_human,   format: md,   maturity: S1, owner: software, covers: "§5 SW/host interface + decisions"}
+  - {file: human/ir_requirements.md,      role: authored_human,   format: md,   maturity: S1, owner: architecture, covers: "§17 what the IR must abstract"}
+
+  - {file: machine/types.yaml,            role: authored_machine, format: yaml, maturity: S2, owner: architecture, covers: "type nodes (dtypes, operand classes, tiles)"}
+  - {file: machine/spec.yaml,             role: authored_machine, format: yaml, maturity: S2, owner: architecture, covers: "param/timing_class/unit/edge nodes + execution model"}
+  - {file: machine/isa.yaml,              role: authored_machine, format: yaml, maturity: S2, owner: architecture, covers: "§6 op nodes (operands+effect for SSA-critical families)"}
+  - {file: machine/kernels.yaml,          role: authored_machine, format: yaml, maturity: S2, owner: architecture, covers: "kernel nodes (npu dialect) + mxu_profile"}
+  - {file: machine/state.yaml,            role: authored_machine, format: yaml, maturity: S2, owner: architecture, covers: "§4 architectural state"}
+  - {file: machine/interfaces.yaml,       role: authored_machine, format: yaml, maturity: S2, owner: microarchitecture, covers: "§5 map, §11 ports/protocols"}
+  - {file: machine/constraints.yaml,      role: authored_machine, format: yaml, maturity: S2, owner: microarchitecture, covers: "§12 constraints, §13 QoI"}
+  - {file: machine/design_space.yaml,     role: authored_machine, format: yaml, maturity: S2, owner: microarchitecture, covers: "§16 DSE knobs"}
+  - {file: machine/test_obligations.yaml, role: authored_machine, format: yaml, maturity: S2, owner: verification, covers: "§14 verification obligations"}
+  - {file: machine/cross_cutting.yaml,    role: authored_machine, format: yaml, maturity: S2, owner: architecture, covers: "§22 cross-cutting axes (mostly open)"}
+  - {file: machine/downstream.yaml,       role: authored_machine, format: yaml, maturity: S2, owner: architecture, covers: "§21 e2e artifacts + ratification decisions + model defects"}
+  - {file: machine/provenance.yaml,       role: authored_machine, format: yaml, maturity: S2, owner: architecture, covers: "§2 sources, §19 claim ledger"}
+
+assets:
+  - {file: assets/images/datatype_fp8_e4m3.png, used_by: human/numerics.md}
+  - {file: assets/images/bf16.png,              used_by: human/numerics.md}
+  - {file: assets/images/datatype_fp16.png,     used_by: human/numerics.md}
+  - {file: assets/images/datatype_fp32.png,     used_by: human/numerics.md}
+  - {file: assets/images/execution_schedule.png, used_by: "human/SPEC.md §9"}
+
+# -----------------------------------------------------------------------------
+# Reading bundles — sets of sections/files that are ONE coupled story (change one,
+# re-read & re-validate the whole bundle). Mirrored for humans in SPEC.md §0.
+# -----------------------------------------------------------------------------
+bundles:
+  - {id: semantics,                 members: [machine/isa.yaml, human/numerics.md, machine/state.yaml], scope: "SPEC §6,§7,§4", why: "instruction semantics reference operand dtypes and architectural state"}
+  - {id: execution_memory_dataflow, members: [machine/spec.yaml, machine/isa.yaml], scope: "SPEC §8,§9,§9.1,§9.2", why: "bank policy, occupancy, latency classes, movement graph are one correctness story"}
+  - {id: programmer_interface,      members: [human/sw_interface.md, machine/spec.yaml, machine/provenance.yaml], scope: "SPEC §5,§15,§2", why: "host lifecycle, control surface, errors, ratification decisions are interdependent"}
+  - {id: perf_dse_quality,          members: [machine/constraints.yaml, machine/design_space.yaml, human/workloads.md], scope: "SPEC §12,§13,§16,§3", why: "targets, the knobs that move them, and the workloads that define them"}
+  - {id: components_interfaces,     members: [machine/spec.yaml, machine/interfaces.yaml], scope: "SPEC §10,§11", why: "component state/responsibilities realized by ports/protocols"}
+  - {id: cross_cutting,             members: [machine/cross_cutting.yaml], scope: "SPEC §22", why: "interconnect/RAS/security/power/QoS/capability — mostly open"}
+  - {id: verification_everything,   members: [machine/test_obligations.yaml], scope: "SPEC §14", why: "obligations cite semantics, memory, scheduling, numerics, interfaces"}
+  - {id: traceability,              members: [machine/provenance.yaml, human/ir_requirements.md, manifest.yaml], scope: "SPEC §2,§17,§19", why: "claims, source mapping, IR mapping span every section"}
+
+cross_refs:
+  - {from: "§6 isa", depends_on: ["§4 state", "§7 numerics", "§9 execution", "§8 memory"]}
+  - {from: "§9 execution", depends_on: ["§8 memory", "§9.2 dataflow", "§12 timing-classes"]}
+  - {from: "§5 programmer_model", depends_on: ["§15 errors", "§2 open-decisions", "sw_interface"]}
+  - {from: "§12 constraints", depends_on: ["§3 workloads", "§16 design-space"]}
+  - {from: "§14 verification", depends_on: ["§6 isa", "§7 numerics", "§8 memory", "§9 execution", "§11 interfaces"]}
+  - {from: "§17 ir_mapping", depends_on: ["all"]}
+  - {from: "§2 provenance", depends_on: ["all"]}

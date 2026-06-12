@@ -1,0 +1,14 @@
+# kernels.yaml (MXU slice) — the driving kernel + MXU fabric profiles (npu DIALECT).
+# kernel.gemm reads/writes state.mrf (the MXU lower-in/out boundary); VMEM/DMA
+# staging is OUT of MXU scope (handled by the full bundle, not this slice).
+nodes:
+- {id: kernel.gemm, kind: kernel, status: normative,
+   refs: {uses_ops: [op.vmatpush.weight.mxu0, op.vmatmul.acc.mxu0, op.vmatpop.bf16.acc.mxu0], reads: [state.mrf], writes: [state.mrf]},
+   ext: {npu: {dataflow: weight_stationary}},
+   attrs: {operation: "C = A.B (weight-stationary, K-tiled accumulate)", in_dtype: type.fp8_e4m3, out_dtype: type.bf16,
+           shapes: ["32x32x32", "32x32x64", "64x64x64"], perf_critical: true,
+           notes: "the first e2e MXU driver - see ../programs/gemm_32x32x32.s and ../human/MXU.md"}}
+
+# MXU fabric profiles (mxu_profile dialect kind): the topology core leaves as a ref.
+- {id: topo.mxu0_systolic, kind: mxu_profile, status: reference, refs: {of_unit: unit.mxu0}, attrs: {fabric: systolic_array, notes: "weight-stationary 2D array; 96-cyc matmul"}}
+- {id: topo.mxu1_tree, kind: mxu_profile, status: reference, refs: {of_unit: unit.mxu1}, attrs: {fabric: inner_product_tree, notes: "reduction-tree inner product; 35-cyc matmul"}}

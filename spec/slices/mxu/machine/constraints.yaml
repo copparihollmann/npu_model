@@ -1,0 +1,51 @@
+# constraints.yaml (MXU slice) — the register-file framing in TWO LAYERS.
+#
+# LAYER A  (status: normative)  — the SIMPLE datapath contract we design/lower to.
+#   A clean register model: stage tiles in MRF, lower into weight/acc registers,
+#   compute into the accumulator, lower out. No banking/port machinery here.
+#
+# LAYER B  (status: reference)  — the ORACLE behavior the npu_model implements
+#   (npu_model/hardware/bank_conflict.py + mxu.py). This is the "annoyingly complex
+#   register file" the contract abstracts away. A generated/lowered design need not
+#   reproduce its structure, but ANY schedule we emit is graded against it, so the
+#   constraints are recorded here verbatim. kind_of: reference.
+nodes:
+
+# ============================ LAYER A — contract ============================
+- {id: constraint.mxu.count, kind: constraint, status: normative, attrs: {kind_of: hard, property: mxu_count, value: 2, notes: "MXU0 systolic + MXU1 inner-product"}}
+- {id: constraint.tile.shape, kind: constraint, status: normative, attrs: {kind_of: hard, property: tile_shape, value: "32x32"}}
+- {id: constraint.mxu.dtype, kind: constraint, status: normative, refs: {subject: unit.mxu0},
+   attrs: {kind_of: functional, text: "matmul is FP8(e4m3) x FP8(e4m3) -> BF16 accumulate; internal product/accumulate precision MUST be >= fp16"}}
+- {id: constraint.mxu.weight_stationary, kind: constraint, status: normative, refs: {subject: state.mxu_weight_slots},
+   attrs: {kind_of: functional, text: "a weight tile loaded by vmatpush.weight stays resident and is reused by every subsequent vmatmul on that MXU until overwritten"}}
+- {id: constraint.mxu.accumulate, kind: constraint, status: normative, refs: {subject: state.mxu_accum_buffers},
+   attrs: {kind_of: functional, text: "vmatmul.acc.* ADDS into the BF16 accumulator (read-modify-write, inout vd); vmatmul.* OVERWRITES it"}}
+- {id: constraint.mxu.lower_in_out, kind: constraint, status: normative, refs: {subject: state.mrf},
+   attrs: {kind_of: functional, text: "MRF is the only lower-in/out path to the MXU: weights/activations enter via vmatpush/vmatmul reads of MRF; results leave via vmatpop writes to MRF. The MXU never reads VMEM or DRAM directly."}}
+- {id: constraint.mxu.blocking, kind: constraint, status: normative,
+   attrs: {kind_of: functional, text: "every MXU op (push/pop/matmul) holds its MXU issue port for its full latency class. Different units (mxu0/mxu1/vpu/xlu/dma) may overlap; only same-unit re-issue is constrained."}}
+# Encoding legality (normative; npu_spec §04 decode + §06 green card) -----------
+- {id: constraint.mxu.encoding_reserved_zero, kind: constraint, status: normative,
+   attrs: {kind_of: hard, text: "decode MUST enforce reserved-zero fields: vmatpush.weight/acc -> vs2=0, vd[5:1]=0 (slot/acc = low bit); vmatpop.* -> vs1=0, vs2[5:1]=0 (acc=vs2[0]); vmatmul.* -> vd[5:1]=0, vs2[5:1]=0 (acc=vd[0], weight=vs2[0])"}}
+- {id: constraint.mxu.bf16_pairing, kind: constraint, status: normative, refs: {subject: state.mrf},
+   attrs: {kind_of: hard, text: "a 32x32 BF16 MRF tile occupies the consecutive register pair {m[r], m[r+1]}; the encoded field names the LOW register; encoding r=63 for a pair field is ILLEGAL (npu_spec §06). Applies to vmatpush.acc.bf16 (vs1) and vmatpop.bf16 (vd)."}}
+- {id: constraint.mxu.selectors, kind: constraint, status: normative, refs: {subject: state.mxu_weight_slots},
+   attrs: {kind_of: hard, text: "2 weight slots + 2 accumulators per MXU; weight slot selected by vd (push) or vs2[0] (matmul); accumulator selected by vd[0] (push/matmul) or vs2[0] (pop). ABI names mxuN.w0/w1, mxuN.acc0/acc1."}}
+
+# ============================ LAYER B — oracle behavior =====================
+- {id: constraint.oracle.mrf_bank_per_register, kind: constraint, status: reference, refs: {subject: state.mrf},
+   attrs: {kind_of: reference, property: bank_model, value: one_bank_per_register,
+           text: "model: each of m0..m63 is its OWN SRAM bank (register index == bank index). Two in-flight ops sharing any register index = bank conflict."}}
+- {id: constraint.oracle.bf16_register_pairing, kind: constraint, status: reference, refs: {subject: state.mrf},
+   attrs: {kind_of: reference, text: "bank-conflict CONSEQUENCE of the (normative) bf16 pairing: an op touching {r, r+1} holds BOTH banks for its latency (bank_conflict.py:_pair). The pairing convention itself is normative - see constraint.mxu.bf16_pairing."}}
+- {id: constraint.oracle.over_issue_stall_vs_error, kind: constraint, status: open,
+   attrs: {kind_of: reference, text: "SPEC vs MODEL discrepancy: npu_spec §04 says the frontend STALLS when the target unit cannot accept (hardware backpressure / arbitration); npu_model RAISES RuntimeError on over-issue to a busy non-DMA unit (idu.py:210) because it assumes a correct static schedule and uses the error to catch scheduling bugs. dma.wait is the one case the model stalls. RATIFY: is over-issue a stall (hardware) or an illegal schedule (contract)?"}}
+- {id: constraint.oracle.mxu_buf_bank_per_mxu, kind: constraint, status: reference, refs: {subject: state.mxu_weight_slots},
+   attrs: {kind_of: reference, property: bank_model, value: one_bank_per_mxu,
+           text: "model: weight buffer and accumulator buffer each have ONE conflict bank per MXU id; both physical slots (w0/w1, acc0/acc1) of an MXU share that bank (weight_buffer_accesses / acc_buffer_accesses use int(mnemonic[-1]))."}}
+- {id: constraint.oracle.conflict_acquire_release, kind: constraint, status: reference,
+   attrs: {kind_of: reference, text: "model: at issue an op ACQUIRES its MRF + weight + acc banks; at completion it RELEASES them. A concurrent access to a held bank raises BankConflictError immediately (a runtime-detected SCHEDULE VIOLATION, never a stall). Software must statically avoid it."}}
+- {id: constraint.oracle.scale_semantics, kind: constraint, status: open, refs: {subject: state.erf},
+   attrs: {kind_of: reference, text: "vmatpop.fp8 requant scale: npu_spec=E8M0 power-of-2 (2^e); npu_model multiplies by raw uint8. OPEN discrepancy - ratify before freeze."}}
+- {id: constraint.oracle.matmul_latency, kind: constraint, status: reference, refs: {subject: unit.mxu0},
+   attrs: {kind_of: reference, text: "authoritative latencies = npu_model MXU_OP_LATENCIES: matmul mxu0=96, mxu1=35; push/pop=32 (both). Note default.py's mxu=32 is a fallback that the per-op dict overrides."}}

@@ -1,0 +1,23 @@
+# npu.yaml — the Atlas NPU dialect. Registers accelerator/domain-specific node
+# KINDS on top of the fixed core (core.py). Designers extend HERE, never core.
+# The loader composes core + dialects listed in manifest.yaml:dialects.
+dialect: npu
+
+kinds:
+  # A workload kernel mapped onto the ISA (domain-specific; not a core concept).
+  - name: kernel
+    id_prefix: kernel
+    required_attrs: [operation]
+    optional_attrs: [in_dtype, out_dtype, shapes, layout, tolerance, perf_critical, notes]
+    ref_roles: {uses_ops: [op], reads: [state], writes: [state]}
+
+  # A concrete MXU fabric profile (the accelerator-specific topology detail that
+  # core deliberately leaves as a unit `topology` reference attribute).
+  - name: mxu_profile
+    id_prefix: topo
+    required_attrs: [fabric]
+    optional_attrs: [notes]
+    ref_roles: {of_unit: [unit]}
+
+# (ext schemas could be declared here per node-kind; for v0 the loader only
+#  checks that any node's `ext.<dialect>` names a registered dialect.)

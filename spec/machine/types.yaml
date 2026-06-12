@@ -1,0 +1,42 @@
+# types.yaml — `type` nodes: data types, operand classes, tile/immediate types.
+# Referenced by state element_type and op operand `type`. (Was prose in the old YAML.)
+nodes:
+
+# --- scalar data types ------------------------------------------------------
+- {id: type.fp8_e4m3, kind: type, status: normative,
+   attrs: {category: dtype, bits: 8, exp: 4, mantissa: 3, signed: true,
+           notes: "float8_e4m3fn: finite (no inf), max +-448, has NaN+subnormals; saturating conversion"}}
+- {id: type.bf16, kind: type, status: normative,
+   attrs: {category: dtype, bits: 16, exp: 8, mantissa: 7, signed: true, notes: "bfloat16, IEEE-style"}}
+- {id: type.fp16, kind: type, status: reference,
+   attrs: {category: dtype, bits: 16, exp: 5, mantissa: 10, signed: true, notes: "internal MXU product/accumulate intermediate only"}}
+- {id: type.fp32, kind: type, status: reference,
+   attrs: {category: dtype, bits: 32, notes: "reference/golden code only; not an architectural operand type"}}
+- {id: type.int32, kind: type, status: normative,
+   attrs: {category: dtype, bits: 32, signed: true, notes: "XRF value (width open: RV32 vs RV64 model behaviors)"}}
+- {id: type.e8m0, kind: type, status: open,
+   attrs: {category: dtype, bits: 8, exp: 8, mantissa: 0,
+           notes: "ERF scale: npu_spec=E8M0 power-of-2 exponent (2^e); model multiplies by raw uint8 - see claim.erf.scale_type"}}
+
+# --- tile / register-view types (op + state element types) ------------------
+- {id: type.mrf_tile_fp8, kind: type, status: normative,
+   attrs: {category: tile, layout: "32x32", element: type.fp8_e4m3, of: "1 m register (1024 B)"}}
+- {id: type.mrf_halftile_bf16, kind: type, status: normative,
+   attrs: {category: tile, layout: "32x16", element: type.bf16, of: "1 m register (1024 B)"}}
+- {id: type.mrf_tile_bf16, kind: type, status: normative,
+   attrs: {category: tile, layout: "32x32", element: type.bf16, of: "consecutive m register pair (low named)"}}
+- {id: type.weight_tile_fp8, kind: type, status: normative,
+   attrs: {category: tile, layout: "32x32", element: type.fp8_e4m3, of: "MXU weight slot (1024 B)"}}
+- {id: type.acc_tile_bf16, kind: type, status: normative,
+   attrs: {category: tile, layout: "32x32", element: type.bf16, of: "MXU accumulator (2048 B)"}}
+
+# --- operand classes (non-tile) --------------------------------------------
+- {id: type.scalar, kind: type, status: normative, attrs: {category: operand_class, element: type.int32, notes: "XRF operand"}}
+- {id: type.scale, kind: type, status: normative, attrs: {category: operand_class, element: type.e8m0, notes: "ERF operand"}}
+- {id: type.imm12, kind: type, status: normative, attrs: {category: operand_class, bits: 12, signed: true}}
+- {id: type.imm16, kind: type, status: normative, attrs: {category: operand_class, bits: 16, notes: "for vli.*, a raw bf16 bit-pattern"}}
+- {id: type.imm20, kind: type, status: normative, attrs: {category: operand_class, bits: 20}}
+- {id: type.shamt, kind: type, status: normative, attrs: {category: operand_class, bits: 5, notes: "model uses 6-bit (&0x3F); RV32 recommended 5-bit"}}
+- {id: type.vmem_addr, kind: type, status: normative, attrs: {category: operand_class, notes: "0-based VMEM byte offset"}}
+- {id: type.dram_addr, kind: type, status: normative, attrs: {category: operand_class, notes: "effective = (dma_base<<32)|offset"}}
+- {id: type.byte_count, kind: type, status: normative, attrs: {category: operand_class, notes: "DMA length in bytes (multiple of 32)"}}

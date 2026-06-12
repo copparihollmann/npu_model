@@ -1,0 +1,84 @@
+# =============================================================================
+# manifest.yaml — MXU slice index. A self-contained, validating subset of the
+# full bundle (../../), restricted to the Matrix Execution Unit and its
+# lower-in/out interface (MRF). Purpose: the first e2e driving subdesign.
+# =============================================================================
+
+slice: mxu
+parent_bundle: ../../          # spec/  (the full Atlas NPU contract this is carved from)
+
+# Dialects loaded on top of the shared core meta-model (../../schema/core.py).
+dialects: [npu]
+
+# The slice reuses the SHARED type system; only the DATA (node set) is sliced.
+schema: ../../schema/core.py   # same core kinds + validator as the full bundle
+
+layout:
+  "human/MXU.md":          "the slice narrative: Layer-A datapath contract + Layer-B oracle behavior + driver"
+  "machine/":              "typed node graph (MXU closure only), canonical for values/claims"
+  "dialects/npu.yaml":     "kernel + mxu_profile kinds (self-contained copy of the bundle dialect)"
+  "programs/gemm_32x32x32.s": "the first e2e MXU driving program"
+  "validate.py":           "standalone validator: python spec/slices/mxu/validate.py"
+  "manifest.yaml":         "this index"
+
+# -----------------------------------------------------------------------------
+# Layered register-file framing (the design decision this slice encodes):
+#   layer_a = simple datapath we design/lower to        (status: normative)
+#   layer_b = npu_model's banked register file / oracle (status: reference)
+# -----------------------------------------------------------------------------
+register_file_framing:
+  layer_a_contract:  [constraint.mxu.weight_stationary, constraint.mxu.accumulate,
+                      constraint.mxu.lower_in_out, constraint.mxu.blocking, constraint.mxu.dtype,
+                      constraint.mxu.encoding_reserved_zero, constraint.mxu.bf16_pairing, constraint.mxu.selectors]
+  layer_b_oracle:    [constraint.oracle.mrf_bank_per_register, constraint.oracle.bf16_register_pairing,
+                      constraint.oracle.mxu_buf_bank_per_mxu, constraint.oracle.conflict_acquire_release,
+                      constraint.oracle.matmul_latency, constraint.oracle.scale_semantics,
+                      constraint.oracle.over_issue_stall_vs_error]
+  abstraction_budget: "Layer A must not cost > 10% vs what Layer B admits (per professor guidance)"
+
+# -----------------------------------------------------------------------------
+# Lineage: GIVEN sources -> this AUTHORED slice -> future OUTPUT.
+# -----------------------------------------------------------------------------
+lineage:
+  given_external_sources:
+    - {ref: npu_model/hardware/mxu.py,          role: "MXU EXU model: latencies (MXU_OP_LATENCIES), blocking tick"}
+    - {ref: npu_model/hardware/bank_conflict.py, role: "the banked register file / conflict checker (Layer B oracle)"}
+    - {ref: npu_model/configs/programs/asm/parameterized_fused_matmul_bias64x64.S, role: "real MXU assembly syntax for the driver"}
+  authored_here:
+    - "human/MXU.md (narrative), machine/*.yaml (typed graph), programs/gemm_32x32x32.s (driver)"
+  carved_from:
+    - "../../machine/{types,state,spec,isa,kernels,constraints}.yaml — MXU closure extracted, faithfully"
+  output_future_not_here:
+    - IR (MXU dialect lowering)
+    - cost model (per-op / per-precision graph cost)
+    - generated RTL (the e2e target)
+    - scoreboard vs npu_model (the oracle)
+
+source_of_truth_policy:
+  values_and_claims: "machine/*.yaml (consistent with the parent bundle and npu_model)"
+  rule: "Any value here MUST match ../../machine/ and npu_model. The slice is an extract, not a fork."
+
+# -----------------------------------------------------------------------------
+# Node closure (what makes the slice self-contained). Counts are informational.
+# -----------------------------------------------------------------------------
+closure:
+  ops:           14   # 4 families: weight_push, acc_push, acc_pop, matmul (x mxu0/mxu1)
+  states:        4    # mrf, mxu_weight_slots, mxu_accum_buffers, erf
+  types:         9    # fp8_e4m3, bf16, fp16, e8m0, 4 tiles, scale
+  units:         2    # mxu0 (systolic), mxu1 (inner-product)
+  timing:        3    # mxu0_matmul=96, mxu1_matmul=35, mxu_push_pop=32
+  edges:         4    # mrf->weight, mrf->acc, mxu_compute, acc->mrf
+  constraints:   17   # 10 Layer-A (incl. encoding/pairing/selectors) + 7 Layer-B (incl. stall-vs-error)
+  kernels:       1    # kernel.gemm (driver handle)
+  mxu_profiles:  2    # topo.mxu0_systolic, topo.mxu1_tree
+
+boundary_out_of_scope:
+  - "VMEM / DMA staging (the MXU never touches them; full bundle handles it)"
+  - "scalar core, VPU/XLU/LSU, control flow"
+
+reconciliation_vs_npu_spec:
+  checked: "npu_spec/{02_system_parameters,03_registers,04_functional_units,05_memory_model,06_instruction_set}"
+  confirmed: "latencies (matmul 96/35, push/pop 32 for BOTH fp8+bf16), funct7 hex 77/00..77/13, tile/slot/acc sizes, weight-stationary + tensor-register-only acc path"
+  added_from_npu_spec: "authoritative Verilog sem per op; reserved-zero + selector encoding (vd[0]/vs2[0]); bf16 pair legality (low-named, r=63 illegal); randomized reset"
+  open_discrepancy: "constraint.oracle.over_issue_stall_vs_error - npu_spec stalls, npu_model raises (idu.py:210)"
+validate: "python spec/slices/mxu/validate.py   # exit 0 = slice graph valid (66 nodes)"

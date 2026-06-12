@@ -1,0 +1,17 @@
+# C1_risc_min — minimal, uniform RISC core: 3 opcodes over a UNIFIED MXU tile register
+# file (state.mxu_tile_regs = weight slots + accumulators as one addressable RF).
+#   tld  — tile load   : MRF tile -> a tile register (weight or acc, target in mod)
+#   tst  — tile store  : a tile register (acc) -> MRF tile
+#   mma  — matmul-acc  : areg = (clear? 0 : areg) + act @ wreg   (dtype/unit/clear in mod)
+# Most uniform encoding, fully explicit operands; more instructions per kernel.
+# Variant-allocated encodings (opcode 0b1110111, fresh funct7).
+nodes:
+- {id: op.tld, kind: op, status: reference, attrs: {family: tile_load, exu: MATRIX, sem: "tile_regs[treg] = m[vs1]  (target weight|acc, unit, dtype from mod)", encoding: {format: VR, opcode: 0b1110111, funct7: 0b0110000, allocated: ablation_C1}}, refs: {latency_class: timing.mxu_push_pop, unit: unit.mxu0},
+   operands: [{name: treg, type: type.tile_any, location: state.mxu_tile_regs, direction: def}, {name: vs1, type: type.mrf_tile_fp8, location: state.mrf, direction: use}, {name: mod, type: type.mod, direction: use}],
+   effect: [{def: treg, expr: {op: load, args: [vs1, mod]}}]}
+- {id: op.tst, kind: op, status: reference, attrs: {family: tile_store, exu: MATRIX, sem: "m[vd] = tile_regs[treg]  (dtype/requant from mod; es1 scale if fp8)", encoding: {format: VR, opcode: 0b1110111, funct7: 0b0110001, allocated: ablation_C1}}, refs: {latency_class: timing.mxu_push_pop, unit: unit.mxu0},
+   operands: [{name: vd, type: type.mrf_tile_bf16, location: state.mrf, direction: def}, {name: treg, type: type.tile_any, location: state.mxu_tile_regs, direction: use}, {name: es1, type: type.scale, location: state.erf, direction: use}, {name: mod, type: type.mod, direction: use}],
+   effect: [{def: vd, expr: {op: store, args: [treg, es1, mod]}}]}
+- {id: op.mma, kind: op, status: reference, attrs: {family: mma, exu: MATRIX, sem: "tile_regs[areg] = (clear? 0 : tile_regs[areg]) + m[act] @ tile_regs[wreg]  (unit/clear from mod)", encoding: {format: VR, opcode: 0b1110111, funct7: 0b0110010, allocated: ablation_C1, latency_note: "96 (mxu0) / 35 (mxu1) by unit field"}}, refs: {latency_class: timing.mxu0_matmul, unit: unit.mxu0},
+   operands: [{name: areg, type: type.tile_any, location: state.mxu_tile_regs, direction: inout}, {name: act, type: type.mrf_tile_fp8, location: state.mrf, direction: use}, {name: wreg, type: type.tile_any, location: state.mxu_tile_regs, direction: use}, {name: mod, type: type.mod, direction: use}],
+   effect: [{def: areg, expr: {op: mma, args: [act, wreg, areg, mod]}}]}

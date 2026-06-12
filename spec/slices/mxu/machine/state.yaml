@@ -1,0 +1,41 @@
+# state.yaml (MXU slice) — the SSA "locations" the MXU datapath reads/writes.
+#
+# LAYER A (simple datapath, normative): three register files form the MXU's
+#   lower-in / compute / lower-out surface:
+#     - state.mrf                : shared tensor staging RF (lower in/out here)
+#     - state.mxu_weight_slots   : MXU-local weight registers (weight-stationary)
+#     - state.mxu_accum_buffers  : MXU-local accumulator registers
+#   That is all the IR/datapath needs to reason about. The banking/conflict
+#   machinery the model implements is captured separately as LAYER B reference
+#   constraints in constraints.yaml (oracle behavior we must respect, not design to).
+#
+# read_by/written_by are DERIVED from op operands (single source of truth).
+nodes:
+
+- {id: state.mrf, kind: state, status: normative,
+   attrs: {category: register_file, visibility: software_visible, count: 64,
+           geometry: "32 rows x 32 bytes = 1024 B", role: "tensor staging RF; MXU lower-in (push) / lower-out (pop) interface",
+           views: "32x32 FP8 (type.mrf_tile_fp8) | 32x32 BF16 register-pair (type.mrf_tile_bf16)",
+           bank_model: one_bank_per_register, reset_value: unspecified,
+           notes: "LAYER A treats m0..m63 as flat tile registers; LAYER B (constraints.yaml) holds the per-register-bank + bf16-pairing detail"}}
+
+- {id: state.mxu_weight_slots, kind: state, status: normative,
+   refs: {element_type: type.weight_tile_fp8, per_unit: [unit.mxu0, unit.mxu1]},
+   attrs: {category: buffer, visibility: accelerator_internal, per_mxu: 2, slot_bytes: 1024,
+           bank_model: one_bank_per_mxu, names: "mxuN.w0, mxuN.w1", selector: "vd (push) / vs2[0] (matmul)",
+           reset_value: "no deterministic reset required (model randomizes: RANDOMIZE_WEIGHT_SLOTS=true)",
+           role: "weight-stationary register: loaded by vmatpush.weight, consumed by vmatmul"}}
+
+- {id: state.mxu_accum_buffers, kind: state, status: normative,
+   refs: {element_type: type.acc_tile_bf16, per_unit: [unit.mxu0, unit.mxu1]},
+   attrs: {category: buffer, visibility: accelerator_internal, per_mxu: 2, buffer_bytes: 2048,
+           bank_model: one_bank_per_mxu, names: "mxuN.acc0, mxuN.acc1", selector: "vd[0] (push/matmul) / vs2[0] (pop)",
+           reset_value: "no deterministic reset required (model randomizes: RANDOMIZE_ACCUM_BUFFERS=true)",
+           addressing: "not directly addressed as m registers; loaded/spilled via tensor registers only",
+           role: "BF16 accumulator: target of vmatmul[.acc], seeded by vmatpush.acc, drained by vmatpop"}}
+
+- {id: state.erf, kind: state, status: reference,
+   refs: {element_type: type.e8m0},
+   attrs: {category: register_file, visibility: software_visible, count: 32, width_bits: 8,
+           names: "e0..e31", role: fp8_quantization_scale, reset_value: unspecified,
+           notes: "only touched by vmatpop.fp8.* (requant scale); peripheral to the matmul datapath - scale semantics open"}}

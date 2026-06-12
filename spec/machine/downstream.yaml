@@ -1,0 +1,17 @@
+# downstream.yaml — `decision` (open ratification) + `artifact` (e2e follow-on) nodes.
+# Model-defects-vs-npu_spec are tracked as claims in provenance.yaml.
+nodes:
+# --- ratification decisions (open before freeze) ---------------------------
+- {id: decision.scalar_width, kind: decision, status: open, attrs: {question: "scalar (XRF) register width", recommended: "RV32, mask writes to 32 bits, 5-bit shamt", alt: "RV64 behaviors (model)", affects: [isa, rtl, dv]}}
+- {id: decision.vmem_bus_width, kind: decision, status: open, attrs: {question: "VMEM data-bus width", recommended: 256, alt: 512, affects: [perf_model, pd]}}
+- {id: decision.dram_aperture, kind: decision, status: assumption, attrs: {question: "architectural DRAM aperture", recommended: "16 GiB", alt: "1 GiB (sim)", affects: [soc_integration]}}
+- {id: decision.host_transport, kind: decision, status: open, attrs: {question: "host transport + STATUS/ERROR/START CSRs + interrupt-vs-poll", recommended: "define an MMIO control block", affects: [sw_interface, soc_integration, driver], notes: "npu_spec intends a control plane + RV32I ABI + serial TileLink; only the register map is missing"}}
+
+# --- downstream artifacts (A..G; see human/SPEC.md §21) --------------------
+- {id: artifact.sw_interface, kind: artifact, status: normative, refs: {depends_on: [decision.host_transport]}, attrs: {name: sw_interface_spec, owner: software, file: human/sw_interface.md, scope: drafted}}
+- {id: artifact.numerics, kind: artifact, status: normative, attrs: {name: numeric_reference_contract, owner: architecture, file: human/numerics.md, scope: drafted}}
+- {id: artifact.microarch, kind: artifact, status: normative, refs: {depends_on: []}, attrs: {name: microarchitecture_spec, owner: microarchitecture, scope: "pipeline stages, buffer/fifo depths, arbitration, systolic fill/drain (96/35 decomposition), bank arbiters - REQUIRED NEXT"}}
+- {id: artifact.soc, kind: artifact, status: normative, refs: {depends_on: [decision.host_transport]}, attrs: {name: soc_integration_spec, owner: software, scope: "bus (AXI/CHI), off-chip TileLink/PHY, interrupts, pins, address decode, IP-XACT"}}
+- {id: artifact.dv, kind: artifact, status: normative, refs: {depends_on: [artifact.numerics, artifact.microarch]}, attrs: {name: dv_plan_and_bitexact_reference, owner: verification, scope: "testbench, SVA, coverage, RTL-vs-model bit-exact equivalence, perf-validation"}}
+- {id: artifact.ppa, kind: artifact, status: normative, attrs: {name: ppa_pd_constraints, owner: software, scope: "node, freq/area/power, SRAM macros, SDC, CDC, DFT (scan+MBIST), UPF, floorplan, thermal"}}
+- {id: artifact.compiler, kind: artifact, status: normative, refs: {depends_on: []}, attrs: {name: compiler_static_scheduler_contract, owner: software, scope: "lower to ISA; conflict-free + correctly-spaced schedules; cost model = timing classes (out of scope by decision; in-repo kernels are the reference)"}}

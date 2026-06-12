@@ -1,0 +1,36 @@
+# constraints.yaml — `constraint` nodes. kind_of: hard|functional|target|ppa|assumption|qoi.
+nodes:
+# --- hard architectural constraints ----------------------------------------
+- {id: constraint.vmem.capacity, kind: constraint, status: normative, refs: {subject: state.vmem}, attrs: {kind_of: hard, property: capacity, value: "1 MiB"}}
+- {id: constraint.vmem.banks, kind: constraint, status: normative, refs: {subject: state.vmem}, attrs: {kind_of: hard, property: banks, value: 8}}
+- {id: constraint.vmem.bank_granularity, kind: constraint, status: normative, refs: {subject: state.vmem}, attrs: {kind_of: hard, property: conflict_granularity_bytes, value: 32}}
+- {id: constraint.imem.capacity, kind: constraint, status: normative, refs: {subject: state.imem}, attrs: {kind_of: hard, property: capacity, value: "128 KiB"}}
+- {id: constraint.mrf.count, kind: constraint, status: normative, refs: {subject: state.mrf}, attrs: {kind_of: hard, property: count, value: 64}}
+- {id: constraint.mxu.count, kind: constraint, status: normative, attrs: {kind_of: hard, property: mxu_count, value: 2}}
+- {id: constraint.dma.channels, kind: constraint, status: normative, refs: {subject: state.sync_flags}, attrs: {kind_of: hard, property: dma_channels, value: 8}}
+- {id: constraint.dma.align, kind: constraint, status: normative, attrs: {kind_of: hard, property: dma_align_bytes, value: 32}}
+- {id: constraint.tile.shape, kind: constraint, status: normative, attrs: {kind_of: hard, property: tile_shape, value: "32x32"}}
+- {id: constraint.insn.width, kind: constraint, status: normative, attrs: {kind_of: hard, property: insn_width_bits, value: 32}}
+- {id: constraint.delay_slots, kind: constraint, status: normative, attrs: {kind_of: hard, property: delay_slots, value: 2}}
+# --- functional requirements -----------------------------------------------
+- {id: constraint.dma_wait_ordering, kind: constraint, status: normative, attrs: {kind_of: functional, text: "dma.wait.chN MUST NOT complete before the channel-N transfer completes"}}
+- {id: constraint.vmem_raw, kind: constraint, status: normative, refs: {subject: state.vmem}, attrs: {kind_of: functional, text: "a VMEM read observes the most recent completed write (program order under static schedule)"}}
+- {id: constraint.bank_conflict_free, kind: constraint, status: normative, attrs: {kind_of: functional, text: "the static schedule MUST be free of MRF/VMEM-line/weight/accumulator bank conflicts; violations illegal"}}
+- {id: constraint.no_over_issue, kind: constraint, status: normative, attrs: {kind_of: functional, text: "MUST NOT issue to a non-DMA unit while busy (full latency class); over-issue is a backpressure schedule violation"}}
+- {id: constraint.mxu_accumulate, kind: constraint, status: normative, attrs: {kind_of: functional, text: "vmatmul.acc.* adds into the BF16 accumulator; vmatmul.* overwrites it"}}
+# --- performance targets (rooflines) ---------------------------------------
+- {id: constraint.roof.dram_bw, kind: constraint, status: reference, refs: {subject: state.dram}, attrs: {kind_of: target, property: bandwidth, value: "2 B/cycle", basis: "32-bit link / 2 cyc-per-beat"}}
+- {id: constraint.roof.vmem_bw, kind: constraint, status: reference, refs: {subject: state.vmem}, attrs: {kind_of: target, property: bandwidth, value: "32 B/cycle", basis: "256-bit bus / 1 cyc-per-beat (open: 64 if 512-bit)"}}
+- {id: constraint.roof.mxu0_peak, kind: constraint, status: reference, refs: {subject: unit.mxu0}, attrs: {kind_of: target, property: peak_flops_per_cycle, value: 683, basis: "2*32*32*32/96"}}
+- {id: constraint.roof.mxu1_peak, kind: constraint, status: reference, refs: {subject: unit.mxu1}, attrs: {kind_of: target, property: peak_flops_per_cycle, value: 1872, basis: "2*32*32*32/35"}}
+- {id: constraint.roof.mxu_total, kind: constraint, status: reference, attrs: {kind_of: target, property: peak_flops_per_cycle, value: 2555}}
+- {id: constraint.util.gemm_64, kind: constraint, status: reference, attrs: {kind_of: target, property: mxu_utilization, op: ">=", value: reference_threshold}}
+# --- PPA (open) + QoI + modeling assumptions -------------------------------
+- {id: constraint.ppa.frequency, kind: constraint, status: open, attrs: {kind_of: ppa, property: frequency, value: TBD}}
+- {id: constraint.ppa.area, kind: constraint, status: open, attrs: {kind_of: ppa, property: area, value: TBD}}
+- {id: constraint.ppa.power, kind: constraint, status: open, attrs: {kind_of: ppa, property: power, value: TBD}}
+- {id: constraint.qoi.cycles, kind: constraint, status: reference, attrs: {kind_of: qoi, label: required, text: "per-kernel cycle count vs reference schedule"}}
+- {id: constraint.qoi.utilization, kind: constraint, status: reference, attrs: {kind_of: qoi, label: target, text: "throughput / MXU utilization"}}
+- {id: constraint.qoi.area_power, kind: constraint, status: open, attrs: {kind_of: qoi, label: stretch, text: "area / power / energy-per-op"}}
+- {id: constraint.assume.dma_bw_model, kind: constraint, status: assumption, attrs: {kind_of: assumption, text: "DMA bandwidth = max(offchip, vmem) beat model; fixed link params"}}
+- {id: constraint.assume.deterministic_onchip, kind: constraint, status: assumption, attrs: {kind_of: assumption, text: "all on-chip latencies are fixed/deterministic"}}
