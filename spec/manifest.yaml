@@ -66,6 +66,8 @@ artifacts:
   - {file: schema/load.py,                role: tool,             format: py,   maturity: na, owner: architecture, covers: "loader: YAML -> typed node graph -> validate; --ssa smoke test"}
   - {file: dialects/npu.yaml,             role: authored_machine, format: yaml, maturity: S2, owner: architecture, covers: "npu dialect: kernel + mxu_profile kinds"}
   - {file: human/ir_mapping.md,           role: authored_human,   format: md,   maturity: S1, owner: architecture, covers: "node -> SSA-IR lowering contract"}
+  - {file: LOWERING.md,                   role: authored_human,   format: md,   maturity: S1, owner: architecture, covers: "prof-facing: human->machine->IR lowering analysis + per-module survey + path of action"}
+  - {file: human/lowering_methodology.md, role: authored_human,   format: md,   maturity: S1, owner: architecture, covers: "formal human->machine->IR contract: per-kind targets, 3 gates, 2 bounded flavor surfaces"}
 
   - {file: human/00_intent.md,            role: authored_human,   format: md,   maturity: S0, owner: architecture, covers: "design intent, canonical pipeline"}
   - {file: human/workloads.md,            role: authored_human,   format: md,   maturity: S0_S1, owner: architecture, covers: "§3 workload characterization"}
